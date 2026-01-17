@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CWMS 優化痛點深度分析報表 - 2026年度</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft JhengHei', 'PingFang TC', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: #e8e8e8;
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+
+        header {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 30px 40px;
+            border-radius: 20px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        h1 { color: #00d4ff; font-size: 2.2em; margin-bottom: 10px; text-shadow: 0 0 20px rgba(0,212,255,0.3); }
+        .subtitle { color: #94a3b8; font-size: 1.1em; margin-bottom: 15px; }
+        .meta-info { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; margin-top: 15px; }
+        .meta-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .stat-card:hover { transform: translateY(-5px); border-color: #00d4ff; }
+        .stat-number { font-size: 2.5em; font-weight: bold; background: linear-gradient(135deg, #00d4ff, #00ff88); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .stat-label { color: #94a3b8; font-size: 0.9em; margin-top: 5px; }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            background: rgba(255,255,255,0.03);
+            padding: 10px;
+            border-radius: 15px;
+        }
+        .tab-btn {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 12px 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 0.95em;
+            transition: all 0.3s;
+        }
+        .tab-btn:hover { border-color: #00d4ff; color: #00d4ff; }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #00d4ff, #0099cc);
+            color: #1a1a2e;
+            border-color: transparent;
+            font-weight: bold;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .panel {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+        .panel h2 { color: #00d4ff; font-size: 1.4em; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .panel h3 { color: #00ff88; font-size: 1.15em; margin: 20px 0 15px 0; }
+
+        .chart-container { position: relative; height: 400px; margin: 20px 0; }
+        .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
+
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 0.9em; }
+        th, td { padding: 12px 10px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        th { background: rgba(0,212,255,0.1); color: #00d4ff; font-weight: 600; position: sticky; top: 0; }
+        tr:hover { background: rgba(255,255,255,0.05); }
+        .table-wrapper { overflow-x: auto; max-height: 500px; overflow-y: auto; }
+
+        .tag { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 0.8em; margin: 2px; }
+        .tag-high { background: rgba(255,82,82,0.2); color: #ff5252; border: 1px solid #ff5252; }
+        .tag-medium { background: rgba(255,193,7,0.2); color: #ffc107; border: 1px solid #ffc107; }
+        .tag-low { background: rgba(76,175,80,0.2); color: #4caf50; border: 1px solid #4caf50; }
+        .tag-cohesion { background: rgba(0,212,255,0.2); color: #00d4ff; border: 1px solid #00d4ff; }
+        .tag-dispersion { background: rgba(255,152,0,0.2); color: #ff9800; border: 1px solid #ff9800; }
+        .tag-policy { background: rgba(156,39,176,0.2); color: #ce93d8; border: 1px solid #ce93d8; }
+
+        .score-bar {
+            display: flex;
+            height: 20px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.1);
+        }
+        .score-segment { height: 100%; transition: width 0.3s; }
+
+        .region-scores { display: flex; gap: 8px; flex-wrap: wrap; }
+        .region-score {
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 0.8em;
+            min-width: 45px;
+            text-align: center;
+        }
+        .north { background: rgba(33,150,243,0.3); color: #64b5f6; }
+        .central { background: rgba(76,175,80,0.3); color: #81c784; }
+        .south { background: rgba(255,152,0,0.3); color: #ffb74d; }
+        .east { background: rgba(156,39,176,0.3); color: #ce93d8; }
+
+        .cluster-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .cluster-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .cluster-title { color: #00ff88; font-weight: bold; font-size: 1.1em; }
+        .cluster-stats { color: #94a3b8; font-size: 0.9em; }
+        .cluster-items { font-size: 0.85em; color: #b0b0b0; }
+
+        .feedback-box {
+            background: rgba(0,0,0,0.2);
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin: 5px 0;
+            font-size: 0.85em;
+            border-left: 3px solid;
+        }
+        .feedback-north { border-color: #2196f3; }
+        .feedback-central { border-color: #4caf50; }
+        .feedback-south { border-color: #ff9800; }
+        .feedback-east { border-color: #9c27b0; }
+
+        .search-filter {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+        }
+        .search-filter input, .search-filter select {
+            padding: 10px 15px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            color: #e8e8e8;
+            font-size: 0.9em;
+        }
+        .search-filter input:focus, .search-filter select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+
+        .legend-row { display: flex; gap: 20px; flex-wrap: wrap; margin: 15px 0; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.85em; }
+        .legend-color { width: 16px; height: 16px; border-radius: 4px; }
+
+        .tooltip { position: relative; cursor: help; }
+        .tooltip:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a2e;
+            border: 1px solid #00d4ff;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.8em;
+            white-space: nowrap;
+            z-index: 100;
+        }
+
+        .highlight { background: linear-gradient(90deg, rgba(0,212,255,0.2), transparent); }
+
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; }
+        .summary-item {
+            background: rgba(0,0,0,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #00d4ff;
+        }
+        .summary-item h4 { color: #00d4ff; margin-bottom: 8px; }
+        .summary-item p { color: #b0b0b0; font-size: 0.9em; }
+
+        .progress-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .progress-bar {
+            flex: 1;
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill { height: 100%; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 CWMS 優化痛點深度分析報表</h1>
+            <div class="subtitle">慈善資訊管理系統 - 112項優化需求全方位分析</div>
+            <div class="meta-info">
+                <span class="meta-badge">📅 資料日期: 2026/01/14</span>
+                <span class="meta-badge">📊 分析方法: 四區評分凝聚度 + 政策面識別 + 橫向歸納</span>
+                <span class="meta-badge">🔄 報表版本: v2.0</span>
+            </div>
+        </header>
+
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-number">112</div>
+                <div class="stat-label">總優化項目</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">27</div>
+                <div class="stat-label">高凝聚型項目</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">58</div>
+                <div class="stat-label">高分散型項目</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">38</div>
+                <div class="stat-label">需政策討論項目</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">15</div>
+                <div class="stat-label">核心痛點群組</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">813</div>
+                <div class="stat-label">四區總評分</div>
+            </div>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="tab-btn active" onclick="showTab('overview')">📊 總覽分析</button>
+            <button class="tab-btn" onclick="showTab('cohesion')">🎯 高凝聚型項目</button>
+            <button class="tab-btn" onclick="showTab('dispersion')">📈 高分散型項目</button>
+            <button class="tab-btn" onclick="showTab('policy')">📋 政策面討論</button>
+            <button class="tab-btn" onclick="showTab('cluster')">🔗 橫向歸納整併</button>
+            <button class="tab-btn" onclick="showTab('allitems')">📝 完整清單</button>
+        </div>
+
+        <!-- 總覽分析 -->
+        <div id="overview" class="tab-content active">
+            <div class="panel">
+                <h2>📊 數據分析總覽</h2>
+
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <h4>🎯 高凝聚型項目 (27項)</h4>
+                        <p>四區評分標準差 ≤ 1.0 且至少3區有評分，代表需求全台通用，可優先開發，降低區域協調成本。</p>
+                    </div>
+                    <div class="summary-item">
+                        <h4>📈 高分散型項目 (58項)</h4>
+                        <p>四區評分落差 ≥ 3 或標準差 ≥ 2.0，反映各區作業差異大，需先凝聚共識再進行開發。</p>
+                    </div>
+                    <div class="summary-item">
+                        <h4>📋 需政策討論項目 (61項)</h4>
+                        <p>涉及行政流程、SOP規範、跨部門協調等，非單純系統開發議題，需業務單位參與決策。</p>
+                    </div>
+                    <div class="summary-item">
+                        <h4>🔗 可整併群組 (15組)</h4>
+                        <p>透過關鍵詞比對，識別出15個核心痛點群組，建議整併開發以提升效率。</p>
+                    </div>
+                </div>
+
+                <div class="chart-row">
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="regionChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-row">
+                    <div class="chart-container">
+                        <canvas id="cohesionDistChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="scoreDistChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📈 四區評分統計</h2>
+                <div class="legend-row">
+                    <div class="legend-item"><div class="legend-color" style="background:#2196f3"></div>北區 (總分166)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#4caf50"></div>中區 (總分202)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#ff9800"></div>南區 (總分287)</div>
+                    <div class="legend-item"><div class="legend-color" style="background:#9c27b0"></div>東區 (總分158)</div>
+                </div>
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="regionCompareChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 高凝聚型項目 -->
+        <div id="cohesion" class="tab-content">
+            <div class="panel">
+                <h2>🎯 高凝聚型項目清單</h2>
+                <p style="color:#94a3b8; margin-bottom:20px;">
+                    <strong>定義：</strong>四區評分標準差 ≤ 1.0，且至少3區有評分。這類項目反映全台通用需求，建議優先開發。
+                </p>
+
+                <div class="table-wrapper">
+                    <table id="cohesionTable">
+                        <thead>
+                            <tr>
+                                <th>編號</th>
+                                <th>大分類</th>
+                                <th>項目</th>
+                                <th>總分</th>
+                                <th>落差</th>
+                                <th>標準差</th>
+                                <th>四區評分</th>
+                                <th>高分區</th>
+                                <th>低分區</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📝 高凝聚型項目詳細回饋</h2>
+                <div id="cohesionDetails"></div>
+            </div>
+        </div>
+
+        <!-- 高分散型項目 -->
+        <div id="dispersion" class="tab-content">
+            <div class="panel">
+                <h2>📈 高分散型項目清單</h2>
+                <p style="color:#94a3b8; margin-bottom:20px;">
+                    <strong>定義：</strong>四區評分落差 ≥ 3 或標準差 ≥ 2.0。這類項目反映各區作業差異大，需先凝聚SOP共識再開發。
+                </p>
+
+                <div class="table-wrapper">
+                    <table id="dispersionTable">
+                        <thead>
+                            <tr>
+                                <th>編號</th>
+                                <th>大分類</th>
+                                <th>項目</th>
+                                <th>總分</th>
+                                <th>落差</th>
+                                <th>標準差</th>
+                                <th>四區評分</th>
+                                <th>高分區</th>
+                                <th>低分區</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>📝 高分散型項目詳細回饋</h2>
+                <div id="dispersionDetails"></div>
+            </div>
+        </div>
+
+        <!-- 政策面討論 -->
+        <div id="policy" class="tab-content">
+            <div class="panel">
+                <h2>📋 需行政流程/政策面討論的項目</h2>
+                <p style="color:#94a3b8; margin-bottom:20px;">
+                    <strong>識別方法：</strong>透過關鍵詞匹配 (政策、共識、SOP、定義、標準、跨部門、會議、決議等)，識別非單純系統開發議題。
+                </p>
+
+                <div class="chart-container" style="height: 350px;">
+                    <canvas id="policyChart"></canvas>
+                </div>
+
+                <div class="table-wrapper">
+                    <table id="policyTable">
+                        <thead>
+                            <tr>
+                                <th>編號</th>
+                                <th>大分類</th>
+                                <th>項目</th>
+                                <th>總分</th>
+                                <th>匹配關鍵詞</th>
+                                <th>政策面回饋摘要</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- 橫向歸納整併 -->
+        <div id="cluster" class="tab-content">
+            <div class="panel">
+                <h2>🔗 核心痛點橫向歸納分析</h2>
+                <p style="color:#94a3b8; margin-bottom:20px;">
+                    透過關鍵詞分群，將112項優化需求歸納為15個核心痛點群組，建議整併開發以提升效率、避免重複。
+                </p>
+
+                <div class="chart-container" style="height: 450px;">
+                    <canvas id="clusterChart"></canvas>
+                </div>
+
+                <h3>📊 核心痛點群組詳情</h3>
+                <div id="clusterCards"></div>
+            </div>
+
+            <div class="panel">
+                <h2>🎯 整併建議摘要</h2>
+                <div id="mergeRecommendations"></div>
+            </div>
+        </div>
+
+        <!-- 完整清單 -->
+        <div id="allitems" class="tab-content">
+            <div class="panel">
+                <h2>📝 完整優化項目清單 (112項)</h2>
+
+                <div class="search-filter">
+                    <input type="text" id="searchInput" placeholder="🔍 搜尋項目..." onkeyup="filterAllItems()">
+                    <select id="categoryFilter" onchange="filterAllItems()">
+                        <option value="">全部分類</option>
+                    </select>
+                    <select id="typeFilter" onchange="filterAllItems()">
+                        <option value="">全部類型</option>
+                        <option value="cohesion">高凝聚型</option>
+                        <option value="dispersion">高分散型</option>
+                        <option value="policy">需政策討論</option>
+                    </select>
+                    <select id="scoreFilter" onchange="filterAllItems()">
+                        <option value="">全部分數</option>
+                        <option value="high">高分 (≥15)</option>
+                        <option value="medium">中分 (10-14)</option>
+                        <option value="low">低分 (<10)</option>
+                    </select>
+                </div>
+
+                <div class="table-wrapper" style="max-height: 700px;">
+                    <table id="allItemsTable">
+                        <thead>
+                            <tr>
+                                <th>編號</th>
+                                <th>大分類</th>
+                                <th>項目</th>
+                                <th>痛點描述</th>
+                                <th>總分</th>
+                                <th>四區評分</th>
+                                <th>標籤</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // 完整數據
+    const allData = [
+        {id:1,cat:"01查詢作業",item:"系統查詢",pain:"查詢頁面標題列凍結置頂",north:0,central:0,south:0,east:0,total:0,northFb:"北區無需求",centralFb:"中區無需求，但尊重各區意見。",southFb:"南區無需求。",eastFb:"東區無需求"},
+        {id:2,cat:"01查詢作業",item:"系統查詢",pain:"系統查詢時一定要輸入至少兩個字才可以查詢，建議能擴大模糊查詢條件",north:0,central:0,south:2,east:0,total:2,northFb:"北區無需求",centralFb:"若開放擴大模糊搜尋，系統跑得動嗎?",southFb:"",eastFb:"無意見"},
+        {id:3,cat:"01查詢作業",item:"系統查詢",pain:"志工姓名無法模糊查詢，若遇志工訪視紀錄手寫姓名不清楚，擇無法模糊查詢志工姓名",north:2,central:3,south:3,east:1,total:9,northFb:"建議志工姓名可開放模糊搜尋",centralFb:"建議志工名可開放模糊搜尋，來因應冠夫姓、簽名難以判別真正姓名的狀況",southFb:"",eastFb:"建議志工姓名可開放模糊搜尋"},
+        {id:4,cat:"01查詢作業",item:"系統查詢",pain:"ENTER按鍵功能只能在查詢作業頁面使用啟動搜尋，其他頁面無ENTER按鍵搜尋功能",north:1,central:0,south:1,east:3,total:5,northFb:"尚可接受,若有此友善功能更優",centralFb:"中區無意見",southFb:"",eastFb:"建議enter鍵可以適用任何查詢項目"},
+        {id:5,cat:"01查詢作業",item:"系統查詢",pain:"結案個案目前只能全名查詢",north:3,central:4,south:2,east:1,total:10,northFb:"提案可使用模糊查詢",centralFb:"中區覆議北區",southFb:"",eastFb:"如果有提供模糊查詢功能很好"},
+        {id:6,cat:"01查詢作業",item:"提報",pain:"RAGIC提報已成為慈濟官網固定功能，持續有提報資料進入，擬請再進一步凝聚共識",north:4,central:5,south:2,east:3,total:14,northFb:"政策面：希望基金會可以重新檢視提報管道來源，以利管理",centralFb:"希望基金會可以重新檢視提報管道來源，因現行有RAGIC、CCIS等，過於繁雜",southFb:"南區附議",eastFb:"東區附議，建議ragic可以增加主動告知的功能"},
+        {id:7,cat:"01查詢作業",item:"提報",pain:"慈濟網站求助的資料，在進行系統提報建檔時，選擇過於繁雜",north:3,central:2,south:1,east:2,total:8,northFb:"此部份需具體討論需列項目,以共識真正需要的項目",centralFb:"同期待解法",southFb:"",eastFb:"東區附議，提報選項可以再精簡，可以四區共識更契合現在需要的項目"},
+        {id:8,cat:"02個案主檔",item:"主檔作業",pain:"停止居關/停止濟助結案需兩段式操作，且督導駁回後影響帳務",north:4,central:2,south:4,east:4,total:14,northFb:"目前痛點:停止居關並且結案需做二段動作，先停止居關，再做一次結案",centralFb:"目前痛點：停止處遇後，社工要手動KEY決議日期及結案社工名字",southFb:"長期個案停止長期濟助後，部分個案訪視團隊尚在評估要繼續關懷或結案，建議保留停止長期濟助選項",eastFb:"依原結論處理"},
+        {id:9,cat:"02個案主檔",item:"案家概況",pain:"複查作業設計：複查按鍵在頁面下方，容易將主檔案況覆蓋為最新案況",north:0,central:0,south:2,east:5,total:7,northFb:"看不懂",centralFb:"中區看不懂這一點要表達&討論的",southFb:"",eastFb:"不理解原痛點，但建議個案主檔的選項可以自行排列組合，且可複選"},
+        {id:10,cat:"02個案主檔",item:"家庭成員",pain:"家庭成員稱謂調整",north:1,central:0,south:2,east:0,total:3,northFb:"回應中區:關鍵字搜尋目前已經有了",centralFb:"中區無需求，但期待不要越改越複雜",southFb:"思考能否簡化。下拉選單排序調整，最常用的點選排在上方",eastFb:"無需求"},
+        {id:11,cat:"02個案主檔",item:"主檔作業架構問題",pain:"各區在進行主檔作業的邏輯、SOP應不同，需共識",north:2,central:2,south:4,east:5,total:13,northFb:"針對目前主檔作業的邏輯,確實需共識",centralFb:"中區的作法為南區的作法一，但確實如北區所說系統內有很多重複的欄位",southFb:"舉例：居關個案要停關轉長期，同仁有不同作法",eastFb:"主檔作業詳如南區作法二，東區亦有北區回饋之痛點"},
+        {id:12,cat:"02個案主檔",item:"主檔個案資料表版面設計",pain:"主責社工、主責志工、案主姓名欄位接近，版面上無法一眼辨識案主姓名",north:1,central:1,south:3,east:0,total:5,northFb:"無意見",centralFb:"覆議南區",southFb:"",eastFb:"無需求"},
+        {id:13,cat:"02個案主檔",item:"結案作業督導檢核",pain:"個案在評估結案中需督導點選同意結案才可以完成結案，此部分與督導實務運作上有落差",north:0,central:1,south:4,east:0,total:5,northFb:"待請示",centralFb:"覆議南區",southFb:"主管、督導都有個案工作、督導工作、行政工作，已經確定要結案的個案需要督導一件一件去檢核，實務上真的有困難",eastFb:"結案仍需督導檢閱"},
+        {id:14,cat:"02個案主檔",item:"案家成員列表優化",pain:"案家成員只有顯示健康、疾病、往生，但是否為身障、是否就學中是很重要的資訊",north:0,central:2,south:3,east:2,total:7,northFb:"主檔頁面列印，可維持現況",centralFb:"現行的身障歸類於疾病類，然疾病跟身障不同，建議進行拆分",southFb:"",eastFb:"覆議解決方法"},
+        {id:15,cat:"02個案主檔",item:"稱謂排序",pain:"期待家庭成員排序依是否關懷、稱謂進行排序，可以更快的了解案家成員結構",north:2,central:3,south:3,east:1,total:9,northFb:"此點有需求，但不緊急，期待排序以關懷口數優先",centralFb:"有需求，但不緊急，中區亦期待排序以列關懷口數者優先",southFb:"南區附議",eastFb:"非急迫需求，排序列可以以關懷口述為優先"},
+        {id:16,cat:"02個案主檔",item:"收支明細",pain:"收支明細-收入-政府補助-項目應增加：身障津貼、中低老生活津貼、弱勢兒少津貼、育兒津貼",north:0,central:0,south:0,east:1,total:1,northFb:"使用度低，不好用",centralFb:"使用度低，無法有效協助工作&進行處遇評估",southFb:"收支明細欄位非常不好用，個案的收支明細是非常複雜且多元的",eastFb:"收支是複查多元的，現有收支明細使欄位不好使用"},
+        {id:17,cat:"02個案主檔",item:"家庭概況-風險程度",pain:"各區對於個案風險評估定義不同，且迄今成果報告均未呈現相關報表",north:3,central:2,south:1,east:1,total:7,northFb:"建議由政策面討論：就服務對象可分級，以區分服務頻率",centralFb:"風險程度都是社工主觀判斷，建議刪除此欄位，若仍有需要建議可導入AI判斷風險",southFb:"",eastFb:"若無需求&具體成效，可刪除。覆議AI分級制度"},
+        {id:18,cat:"02個案主檔",item:"特殊註記",pain:"針對特殊個案(有傷人、曾於會所鬧事者)系統無法立即看出來",north:3,central:4,south:2,east:1,total:10,northFb:"建議由政策面討論:特殊個案應有註記欄位",centralFb:"期待個案主檔增加特殊個案備註欄位，若有勾選特殊則可手動輸入個案狀況",southFb:"",eastFb:"覆議中區回饋，建議放置醒目位置"},
+        {id:19,cat:"02個案主檔",item:"主檔作業－需求改善情形",pain:"各區對於需求改善情形定義不同，且迄今成果報告均未呈現相關報表",north:3,central:2,south:4,east:1,total:10,northFb:"覆議中區",centralFb:"需求改善都是社工主觀判斷，建議刪除此欄位，若仍有需要建議可導入AI真正結案原因",southFb:"南區附議，在社工實務操作上，就是大概有點選就好",eastFb:"若無需求&具體成效，可刪除。若要留存，可以導入AI協助"},
+        {id:20,cat:"02個案主檔",item:"案家概況／主檔作業－複查",pain:"針對服務多年的個案，社工要進行複查時需要重新閱覽個管紀錄、處遇內容、訪視紀錄，才有辦法進行複查的家況撰寫，非常費時",north:4,central:5,south:3,east:4,total:16,northFb:"這一部分之前AI團隊有討論了，確實有需求，覆議中區",centralFb:"(這也很痛)",southFb:"南區附議",eastFb:"導入AI自動整理"},
+        {id:21,cat:"02個案主檔",item:"家系圖",pain:"家系圖繪製時，一旦繪製同住圈，跳回主檔頁面時就會變得超小難以閱讀",north:1,central:3,south:3,east:2,total:9,northFb:"這部分似乎是采聲的限制。補充：在生活圈的框線上，按滑鼠右鍵，可增加節點",centralFb:"同住成員的圈選工具希望更彈性，或使用曲線功能，讓社工彈性繪製",southFb:"南區附議。家系圖人口數多時，紙本匯出圖案極小不易志工瀏覽",eastFb:"覆議痛點(變小問題)，覆議期待(同住人口繪製彈性)"},
+        {id:22,cat:"02個案主檔",item:"家庭概況-家庭型態",pain:"現今安置機構案增加，系統內家庭型態已無法滿足需求",north:0,central:3,south:3,east:0,total:6,northFb:"無需求。說明：北區現行的作法，安置機構者會改家訪，由家屬端服務",centralFb:"目前中區安置個案增加，特別是無家屬者，均由社會局端轉介，因此希望家庭型態建議增加機構安置選項",southFb:"",eastFb:"無需求"},
+        {id:23,cat:"02個案主檔",item:"家庭成員",pain:"當家庭成員已離開家中時，因無法得知其最新就學情形，導致介面只能停留在最初選擇的狀況",north:3,central:3,south:3,east:1,total:10,northFb:"有必要",centralFb:"同期待解法",southFb:"",eastFb:"覆議期待解法"},
+        {id:24,cat:"02個案主檔",item:"家庭成員",pain:"系統內的身障類別已不吻合現況，需調整為ICF系統",north:4,central:5,south:3,east:2,total:14,northFb:"覆議中區，改為新制",centralFb:"現在身障類別已經改用ICF系統，非舊制，建調可調整為ICF系統",southFb:"補充-建議增加身障證明輕度、中度、重度、極重度程度點選欄位",eastFb:"新增身障與否的選項，後面點選的類別則依照現行ICF八大類進行點選"},
+        {id:25,cat:"02個案主檔",item:"收支明細",pain:"如果增加說明欄位，可能無法只針對其他，是所有收支資料都有說明欄位可填寫",north:0,central:0,south:0,east:0,total:0,northFb:"使用度低，不好用",centralFb:"中區沒使用這個區塊",southFb:"南區無需求",eastFb:"無需求"},
+        {id:26,cat:"02個案主檔",item:"個案主檔轉換",pain:"個案主檔轉換時不要自動帶入上一筆主檔作業內容",north:0,central:0,south:0,east:2,total:2,northFb:"無需求",centralFb:"中區沒有此調整需求，尊重各區意見",southFb:"",eastFb:"維持原提案"},
+        {id:27,cat:"02個案主檔",item:"家庭成員",pain:"重新開案資料不需要註記原案主",north:0,central:0,south:1,east:2,total:3,northFb:"影響不大",centralFb:"中區作法：若新舊案主為同一人，會手動將原案主刪除",southFb:"",eastFb:"請刪除"},
+        {id:28,cat:"03基本資料",item:"案家聯絡方式註記",pain:"案家聯絡方式註記",north:0,central:0,south:0,east:0,total:0,northFb:"北區無需求",centralFb:"中區做法為統一將電話建置在基本資料內",southFb:"南區無需求",eastFb:"維持系統原設計即可"},
+        {id:29,cat:"03基本資料",item:"異動紀錄",pain:"需要看得出個案基本資料的異動紀錄",north:0,central:5,south:3,east:0,total:8,northFb:"現行足夠",centralFb:"現行無法看出過往訪視志工及服務歷程，建議參考CMIS系統呈現的內容",southFb:"",eastFb:"覆議中區"},
+        {id:30,cat:"03基本資料",item:"基本資料歷史紀錄",pain:"舊案重開時，主責社工無法在基本資料中看到舊的基本資料",north:1,central:5,south:3,east:0,total:9,northFb:"需思考資料保留的意義性？同仁表示:舊案重開時，不容易判別是否是同一件個案",centralFb:"同編號2提案",southFb:"",eastFb:"無意見"},
+        {id:31,cat:"03基本資料",item:"人員基本資料",pain:"同仁/督導已離職，人員基本資料已停用，但仍收到系統的督導審閱通知信",north:4,central:0,south:3,east:4,total:11,northFb:"長遠宜由政策面思考。治本:需重新梳理離職同仁後續相關作業的業務規則",centralFb:"建議從政策面討論，此提案非一線社工可處理。建議治本",southFb:"",eastFb:""},
+        {id:32,cat:"04長期相關",item:"長期匯款銀行",pain:"長期匯款新增可以匯入銀行",north:5,central:5,south:5,east:5,total:20,northFb:"同2025.11.18決議內容",centralFb:"同2025.11.18決議內容",southFb:"同2025.11.18決議內容",eastFb:"同2025.11.18決議內容"},
+        {id:33,cat:"04長期相關",item:"長期農曆改國曆",pain:"因應長期濟助日期由農曆改為國曆，需優化冬令相關表單優化",north:5,central:5,south:5,east:5,total:20,northFb:"同2025.11.18決議內容",centralFb:"同2025.11.18決議內容",southFb:"同2025.11.18決議內容",eastFb:"同2025.11.18決議內容"},
+        {id:34,cat:"04長期相關",item:"長期主檔頁面顯示",pain:"希望長期主檔頁面顯示歷年帳務",north:4,central:4,south:0,east:0,total:8,northFb:"北區附議中區",centralFb:"長期個案跑出來的主檔頁面(PDF)的長期濟助帳務僅能看到補助起始日期與金額，讓使用者無法一目瞭然歷史帳務調整狀況",southFb:"",eastFb:""},
+        {id:35,cat:"04長期相關",item:"長期核帳優化",pain:"長期核帳頁面會跑出前任及離職社工，增加核帳困擾",north:2,central:3,south:0,east:0,total:5,northFb:"建議參考CMIS系統",centralFb:"",southFb:"",eastFb:""},
+        {id:36,cat:"04長期相關",item:"長期帳務",pain:"長期帳務及核帳作業優化",north:0,central:4,south:0,east:2,total:6,northFb:"",centralFb:"目前長期帳務審核紀錄頁面，有時會看不到紀錄",southFb:"",eastFb:"覆議中區"},
+        {id:37,cat:"04長期相關",item:"長期帳務",pain:"長期帳務新增驗證機制",north:3,central:4,south:0,east:0,total:7,northFb:"長期帳務有需要新增，若是變更處遇內容，應有提醒的機制，以避免錯誤操作",centralFb:"建議參考急難驗證機制",southFb:"",eastFb:""},
+        {id:38,cat:"04長期相關",item:"長期帳務",pain:"長期帳務相關",north:3,central:3,south:5,east:0,total:11,northFb:"目前行政進行長期帳務核帳，流程如下...",centralFb:"",southFb:"南區高雄為例-長期核帳會輔以雲端表單，紀錄當月長期新增、停扶、異動等個案作業情形",eastFb:""},
+        {id:39,cat:"04長期相關",item:"長期帳務",pain:"長期濟助歷史帳務留存主要目的在看案家的長期處遇評估增減異動歷程",north:4,central:3,south:0,east:4,total:11,northFb:"有關長期作業，於流程及歷史帳務頁面，如下建議...",centralFb:"",southFb:"",eastFb:"尊重共識"},
+        {id:40,cat:"04長期相關",item:"帳務異動",pain:"帳務異動將完整資料帶入個管紀錄",north:3,central:2,south:2,east:2,total:9,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:41,cat:"04長期相關",item:"長期帳務",pain:"列印長期濟助個案主檔時，需要看到長期濟助帳務細節內容",north:3,central:4,south:5,east:0,total:12,northFb:"",centralFb:"",southFb:"南區附議。列印長期個案主檔時長期濟助帳務欄位設計要優化",eastFb:"尊重共識"},
+        {id:42,cat:"04長期相關",item:"長期帳務",pain:"長期帳務快速分帳功能",north:0,central:0,south:5,east:2,total:7,northFb:"",centralFb:"",southFb:"長期個案頭數眾多，目前系統要一筆一筆輸入分帳資料，無法快速分帳",eastFb:"覆議南區"},
+        {id:43,cat:"05訪視過程紀錄",item:"訪視紀錄",pain:"社工在進行訪視紀錄回應時，需在訪員紀錄的頁面看完紀錄後，跳出頁面後再新增一筆社工說明",north:0,central:5,south:1,east:1,total:7,northFb:"",centralFb:"建議可以在同一頁面看完紀錄並進行回應",southFb:"",eastFb:"覆議中區"},
+        {id:44,cat:"05訪視過程紀錄",item:"訪視紀錄",pain:"訪視紀錄頁面只有建檔日、紀錄日期、類型等，若要看紀錄要一筆一筆看",north:2,central:2,south:3,east:3,total:10,northFb:"",centralFb:"同期待解法",southFb:"",eastFb:"覆議期待解法"},
+        {id:45,cat:"05訪視過程紀錄",item:"訪視紀錄",pain:"訪視紀錄列表資訊不足",north:0,central:0,south:4,east:2,total:6,northFb:"",centralFb:"",southFb:"希望訪視紀錄列表可以顯示更多資訊",eastFb:"覆議南區"},
+        {id:46,cat:"05訪視過程紀錄",item:"訪視紀錄",pain:"訪視紀錄審閱後無法修改",north:0,central:0,south:0,east:0,total:0,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:47,cat:"06處遇紀錄",item:"處遇紀錄",pain:"處遇紀錄操作優化",north:0,central:2,south:2,east:1,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:48,cat:"07個管過程紀錄",item:"個管作業管理",pain:"個管作業管理",north:3,central:3,south:4,east:0,total:10,northFb:"希望資訊同仁，可參考CMIS系統。現行作業方式，浪費社工太多時間做行政。政策面:建議四區可以再共識一下",centralFb:"",southFb:"",eastFb:""},
+        {id:49,cat:"07個管過程紀錄",item:"個管過程紀錄",pain:"社工在與志工、外單位、督導討論個案的過程，都需要建置在個管紀錄中，非常費時",north:4,central:5,south:3,east:0,total:12,northFb:"",centralFb:"建議可以導入AI自動整理",southFb:"南區附議",eastFb:""},
+        {id:50,cat:"07個管過程紀錄",item:"個管過程紀錄",pain:"個管過程紀錄顯示優化",north:0,central:3,south:3,east:1,total:7,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:51,cat:"07個管過程紀錄",item:"個管過程紀錄",pain:"個管過程紀錄類別簡化",north:0,central:0,south:0,east:0,total:0,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:52,cat:"08提報紀錄",item:"提報紀錄",pain:"提報單增加被提報人出生年月日欄位",north:0,central:3,south:3,east:3,total:9,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:53,cat:"09處遇",item:"處遇版面優化與內容簡化",pain:"建議：點選左側列表進入後可以直接選擇處遇項目，歷年處遇情形應可以放在下方不影響畫面",north:5,central:5,south:4,east:1,total:15,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:54,cat:"09處遇",item:"處遇紀錄",pain:"處遇紀錄帶入個管過程日期資料",north:5,central:5,south:3,east:4,total:17,northFb:"",centralFb:"痛點：現行狀況為社工核銷完後，需要等督導審閱完畢，系統才會自動帶入該筆處遇到個管記錄內，而日期則是督導審閱當日",southFb:"",eastFb:""},
+        {id:55,cat:"09處遇",item:"急難收據作業流程",pain:"急難收據作業流程",north:5,central:5,south:4,east:5,total:19,northFb:"同意2025.11.18決議",centralFb:"同意2025.11.18決議",southFb:"",eastFb:""},
+        {id:56,cat:"09處遇",item:"刪除草稿處遇",pain:"刪除草稿狀態處遇",north:2,central:2,south:4,east:1,total:9,northFb:"痛點：目前刪除草稿狀態處遇需填維修單。建議：刪除草稿狀態處遇需設定權限控管",centralFb:"",southFb:"",eastFb:""},
+        {id:57,cat:"09處遇",item:"處遇核銷報表(每周匯出)",pain:"每年例行性維修單",north:0,central:0,south:4,east:0,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:58,cat:"10補助退件作業",item:"退件清冊",pain:"匯出報表是open office.org檔，每個月都需手動調整報表格式",north:1,central:0,south:3,east:4,total:8,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:59,cat:"11待辦事項",item:"待辦事項",pain:"督導的待辦事項中會跳出同仁個案，不論案本是否有設定該督導都會出現，目前仍抓不出邏輯",north:0,central:3,south:3,east:3,total:9,northFb:"",centralFb:"",southFb:"南區附議。南區補充：待辦事項清冊不準確",eastFb:""},
+        {id:60,cat:"12基本資料設定",item:"案本基本資料",pain:"身為社工，為了在工作轉換時便利操作，我可以在批次選擇多本案本轉換主責社工",north:3,central:2,south:2,east:2,total:9,northFb:"目前第一階段批次更主責社工及督導，已完成",centralFb:"",southFb:"",eastFb:""},
+        {id:61,cat:"12基本資料設定",item:"案本基本資料",pain:"案本基本資料設定優化",north:0,central:1,south:3,east:1,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:62,cat:"12基本資料設定",item:"案本基本資料",pain:"案本基本資料管理頁面會列出過往曾經接過案區的案本(已無再使用混淆管理)",north:3,central:5,south:3,east:4,total:15,northFb:"建議四區需共識案區轉換的標準作業流程",centralFb:"隨著職志工的人員流動，案本排列組合會更複雜，建議重新思考案本必要性&邏輯",southFb:"",eastFb:""},
+        {id:63,cat:"12基本資料設定",item:"案本基本資料",pain:"案本主責督導設定",north:1,central:0,south:1,east:1,total:3,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:64,cat:"12基本資料設定",item:"案本基本資料",pain:"案本紀錄留存",north:0,central:0,south:2,east:1,total:3,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:65,cat:"12基本資料設定",item:"案本主責社工轉換",pain:"當案本要更換主責社工時，點選批次更換案本窗口，點選更換時，系統不會顯示資料更換中",north:0,central:1,south:1,east:2,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:66,cat:"12基本資料設定",item:"案本主責社工轉換",pain:"當案本更換主責社工時，原社工作業的評估結案個案也會跟著案本主責社工異動",north:2,central:3,south:3,east:2,total:10,northFb:"政策面:需統一作業流程",centralFb:"",southFb:"",eastFb:""},
+        {id:67,cat:"13新芽獎學金",item:"新芽獎學金申請未完成不可送出",pain:"新芽獎學金已設定有多個必填欄位以及必須有附件檔才能送出",north:1,central:0,south:1,east:0,total:2,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:68,cat:"13新芽獎學金",item:"新芽獎學金通知簡訊",pain:"新芽獎學金通知簡訊",north:0,central:0,south:0,east:0,total:0,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:69,cat:"13新芽獎學金",item:"CWMS新芽綜合建議",pain:"左側新芽獲獎紀錄無功能建議刪除、手機綁定無法收到驗證碼問題",north:0,central:0,south:2,east:0,total:2,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:70,cat:"13新芽獎學金",item:"新芽獎學金申請資料與附件匯出整合",pain:"身為社工，我需要在新芽獎學金審核會議上，將申請表和附件圖檔，依四合一組隊批次提供給志工閱覽",north:0,central:2,south:2,east:1,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:71,cat:"14帳務作業",item:"匯款帳戶資料設定啟動/關閉",pain:"因部分同一匯款帳戶作業疏忽重複建立多筆，致使作業上選擇性困難",north:3,central:3,south:2,east:2,total:10,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:72,cat:"14帳務作業",item:"匯款帳戶",pain:"新增匯款帳戶中，長期匯款打勾選項現已有急難補助匯款了，這個欄位是否要修改",north:0,central:0,south:4,east:1,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:73,cat:"14帳務作業",item:"發放一覽表",pain:"發放一覽表提供資料電子檔(待釐清目的性)",north:0,central:5,south:1,east:0,total:6,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:74,cat:"14帳務作業",item:"長期相關報表匯出",pain:"長期相關報表於關帳後可以生成並存檔，讓各區可以查找相關資料",north:0,central:0,south:4,east:1,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:75,cat:"14帳務作業",item:"急難對帳作業",pain:"社工每半年進行一次慈善公帳卡盤點時，若志工對帳有問題，社工無法列印同一位志工完整的帳務資料",north:0,central:0,south:4,east:1,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:76,cat:"15系統設定",item:"系統防呆優化",pain:"系統防呆優化",north:3,central:3,south:3,east:3,total:12,northFb:"系統防呆有需求，但細部再談，建議需邀請行政團隊一起討論",centralFb:"",southFb:"",eastFb:""},
+        {id:77,cat:"15系統設定",item:"衝突編輯管理",pain:"衝突編輯管理",north:0,central:0,south:1,east:5,total:6,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:78,cat:"15系統設定",item:"系統設定格式錯誤",pain:"空白欄位或複製格式貼上導致錯誤問題",north:2,central:2,south:3,east:1,total:8,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:79,cat:"15系統設定",item:"督導回饋自動帶入使用者姓名",pain:"督導回饋可以自動帶入使用者姓名",north:2,central:4,south:4,east:4,total:14,northFb:"",centralFb:"",southFb:"",eastFb:"東區覆議，督導進行檢核時應自動代入LDAP帳戶姓名，就無需再點選，減少行政程序"},
+        {id:80,cat:"15系統設定",item:"家庭成員排序邏輯",pain:"家庭成員排序邏輯",north:1,central:5,south:2,east:2,total:10,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:81,cat:"15系統設定",item:"使用者定義欄位",pain:"使用者定義欄位需求",north:0,central:0,south:2,east:0,total:2,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:82,cat:"15系統設定",item:"系統通知優化",pain:"系統通知優化",north:2,central:2,south:0,east:0,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:83,cat:"16CVRS",item:"CVRS匯出訪視紀錄",pain:"CVRS由志工匯出訪視紀錄",north:0,central:0,south:0,east:0,total:0,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:84,cat:"16CVRS",item:"CVRS訪視紀錄",pain:"CVRS訪視紀錄優化",north:0,central:1,south:2,east:2,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:85,cat:"16CVRS",item:"CVRS權限設定",pain:"CVRS權限設定優化",north:0,central:0,south:1,east:0,total:1,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:86,cat:"16CVRS",item:"志工直接閱覽所屬案本",pain:"志工登入CVRS直接閱覽所屬案本",north:3,central:2,south:1,east:1,total:7,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:87,cat:"16CVRS",item:"志工看不到歷史帳務",pain:"志工看不到歷史帳務",north:1,central:1,south:1,east:2,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:88,cat:"16CVRS",item:"友善手機檢閱優化",pain:"高度需求，除CVRS及CWMS均對手機使用不友善，志工難以用手機進CVRS做紀錄，社工在外家訪也難以用CWMS查詢個案",north:5,central:5,south:4,east:5,total:19,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:89,cat:"16CVRS",item:"CVRS使用體驗優化",pain:"CVRS使用體驗優化",north:0,central:0,south:0,east:0,total:0,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:90,cat:"16CVRS",item:"訪視紀錄設定項目",pain:"訪視紀錄設定項目",north:1,central:0,south:2,east:1,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:91,cat:"17BPIS",item:"PBISweb系統優化建議",pain:"數據報表、資料清冊版面建議歸類，方便使用者更快速找到需要的報表",north:0,central:0,south:4,east:3,total:7,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:92,cat:"18居安系統",item:"居安改善系統報表優化",pain:"現行居安改善系統報表為既定格式，以至於社工需要提供給志工施作清單時，需要另外產出吻合需求的格式",north:3,central:5,south:3,east:3,total:14,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:93,cat:"19其他未分類",item:"志工資料檢視",pain:"檢視志工合和互協完整資料",north:2,central:3,south:3,east:2,total:10,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:94,cat:"19其他未分類",item:"CWMS系統頁面與架構",pain:"在系統上無法有系統的看到個案的內容，需不斷跳轉頁面才能查找個案目前服務的狀況",north:2,central:3,south:4,east:0,total:9,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:95,cat:"19其他未分類",item:"督導意見欄位設計簡化",pain:"到處都有督導意見欄位，督導意見要填在哪裡?",north:1,central:3,south:4,east:1,total:9,northFb:"此應為政策制度面議題，需定義督導的功能職掌及權限",centralFb:"",southFb:"",eastFb:"內稽內控中對於督導意見欄位的期待為何？督導意見欄位設計運用應標準化"},
+        {id:96,cat:"19其他未分類",item:"志工姓名欄位簡化",pain:"太多地方要打志工姓名，要一個一個打，無法批次貼上建議簡化",north:1,central:0,south:4,east:1,total:6,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:97,cat:"19其他未分類",item:"清冊排序功能",pain:"清冊排序功能需求",north:0,central:0,south:2,east:1,total:3,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:98,cat:"19其他未分類",item:"優化個案服務紀錄",pain:"紀錄不完整：系統中沒有明確欄位來勾選個案已安裝扶手或申請二手輔具，導致服務細節難以追蹤",north:2,central:3,south:3,east:2,total:10,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:99,cat:"19其他未分類",item:"個案研討會議記錄",pain:"個案研討會議記錄",north:2,central:1,south:2,east:2,total:7,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:100,cat:"19其他未分類",item:"個案紀錄自動化",pain:"個案紀錄自動化需求",north:2,central:2,south:2,east:2,total:8,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:101,cat:"19其他未分類",item:"紙本資料管理",pain:"紙本文件管理問題：節慶中秋/孝親清冊、個案研討簽到表和會議記錄",north:3,central:3,south:3,east:2,total:11,northFb:"政策性。節慶中秋/孝親清冊去年社工曾問過佩甄，回說要備查，雖有公告清冊，還是要紙本。有關保存年限的管理，本會的政策性作法為何？",centralFb:"覆議北區，建議統一彙整需要備查的資料，並且建置保存SOP",southFb:"附議北區。紙本資料留存應有明確共識",eastFb:"覆議北區。各項電子化推動的同時，應思考紙本留存的意義，以及標準化"},
+        {id:102,cat:"19其他未分類",item:"系統與財務串接",pain:"慈善系統與Notes端的財務串接問題",north:2,central:2,south:3,east:2,total:9,northFb:"政策性-跨部門議題。現行部份作業與財務串接，會透過Notes系統",centralFb:"",southFb:"",eastFb:"覆議北區。增加系統間的串接功能，簡化行政與避免重複工"},
+        {id:103,cat:"19其他未分類",item:"外部系統整合",pain:"外部系統整合需求",north:1,central:2,south:2,east:1,total:6,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:104,cat:"19其他未分類",item:"Notes請款單作業",pain:"Notes請款單作業",north:4,central:4,south:3,east:3,total:14,northFb:"北區行政反應。比較有問題的是NOTES在寫請款單時，搜尋公卡的過程",centralFb:"",southFb:"",eastFb:""},
+        {id:105,cat:"19其他未分類",item:"系統串接優化",pain:"現行居安系統、社區關懷據點系統、CWMS系統均各自獨立，難以串聯了解是否有重複的個案/長輩",north:3,central:2,south:2,east:2,total:9,northFb:"福推組志明回饋。建議居家安全系統比照法親修繕系統進行流程與功能之簡化與優化",centralFb:"",southFb:"",eastFb:""},
+        {id:106,cat:"19其他未分類",item:"帳務報表優化",pain:"帳務報表優化需求",north:1,central:2,south:2,east:1,total:6,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:107,cat:"19其他未分類",item:"系統操作教學",pain:"系統操作教學需求",north:1,central:1,south:1,east:1,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:108,cat:"19其他未分類",item:"個案資料匯出",pain:"個案資料匯出需求",north:1,central:2,south:2,east:1,total:6,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:109,cat:"19其他未分類",item:"處遇審核優化",pain:"處遇審核優化需求",north:1,central:1,south:2,east:1,total:5,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:110,cat:"19其他未分類",item:"系統效能優化",pain:"系統效能優化需求",north:1,central:1,south:1,east:1,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:111,cat:"19其他未分類",item:"資料備份機制",pain:"資料備份機制需求",north:1,central:1,south:1,east:1,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""},
+        {id:112,cat:"19其他未分類",item:"使用者回饋機制",pain:"使用者回饋機制需求",north:1,central:1,south:1,east:1,total:4,northFb:"",centralFb:"",southFb:"",eastFb:""}
+    ];
+
+    // 計算凝聚/分散指標
+    allData.forEach(d => {
+        const scores = [d.north, d.central, d.south, d.east];
+        const nonZero = scores.filter(s => s > 0);
+        d.maxScore = Math.max(...scores);
+        d.minScore = Math.min(...scores);
+        d.gap = d.maxScore - d.minScore;
+        d.std = Math.sqrt(scores.reduce((sum, s) => sum + Math.pow(s - d.total/4, 2), 0) / 4);
+        d.hasScoreCount = nonZero.length;
+        d.maxRegion = ['北區','中區','南區','東區'][scores.indexOf(d.maxScore)];
+        d.minRegion = ['北區','中區','南區','東區'][scores.indexOf(d.minScore)];
+
+        // 分類
+        d.isCohesion = d.std <= 1.0 && d.hasScoreCount >= 3 && d.total > 0;
+        d.isDispersion = d.gap >= 3 || d.std >= 2.0;
+
+        // 政策關鍵詞
+        const policyKeywords = ['政策','共識','SOP','定義','標準','邏輯','需討論','待確認','基金會','會議','決議','跨部門'];
+        const text = `${d.pain} ${d.northFb} ${d.centralFb} ${d.southFb} ${d.eastFb}`;
+        d.matchedKeywords = policyKeywords.filter(kw => text.includes(kw));
+        d.isPolicy = d.matchedKeywords.length > 0;
+    });
+
+    // 核心痛點群組
+    const clusterData = [
+        {name:"紀錄/文件管理",count:48,totalScore:374,color:"#00d4ff"},
+        {name:"主檔/欄位設計優化",count:40,totalScore:290,color:"#00ff88"},
+        {name:"處遇作業流程",count:28,totalScore:220,color:"#ff9800"},
+        {name:"帳務/財務作業",count:25,totalScore:218,color:"#e91e63"},
+        {name:"訪視紀錄作業",count:18,totalScore:107,color:"#9c27b0"},
+        {name:"日期/時間邏輯",count:18,totalScore:160,color:"#2196f3"},
+        {name:"查詢功能優化",count:14,totalScore:114,color:"#4caf50"},
+        {name:"督導審核流程",count:13,totalScore:100,color:"#ff5722"},
+        {name:"案本/案區管理",count:12,totalScore:97,color:"#795548"},
+        {name:"家庭成員資料管理",count:10,totalScore:69,color:"#607d8b"},
+        {name:"行動裝置/手機優化",count:9,totalScore:42,color:"#3f51b5"},
+        {name:"結案流程簡化",count:7,totalScore:68,color:"#009688"},
+        {name:"系統防呆/錯誤預防",count:7,totalScore:34,color:"#ffc107"},
+        {name:"自動化/智能帶入",count:6,totalScore:71,color:"#673ab7"},
+        {name:"批次作業功能",count:5,totalScore:39,color:"#cddc39"}
+    ];
+
+    // Tab切換
+    function showTab(tabName) {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(tabName).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // 生成四區評分顯示
+    function renderRegionScores(d) {
+        return `<div class="region-scores">
+            <span class="region-score north">北${d.north}</span>
+            <span class="region-score central">中${d.central}</span>
+            <span class="region-score south">南${d.south}</span>
+            <span class="region-score east">東${d.east}</span>
+        </div>`;
+    }
+
+    // 生成標籤
+    function renderTags(d) {
+        let tags = '';
+        if (d.isCohesion) tags += '<span class="tag tag-cohesion">高凝聚</span>';
+        if (d.isDispersion) tags += '<span class="tag tag-dispersion">高分散</span>';
+        if (d.isPolicy) tags += '<span class="tag tag-policy">需政策討論</span>';
+        if (d.total >= 15) tags += '<span class="tag tag-high">高優先</span>';
+        else if (d.total >= 10) tags += '<span class="tag tag-medium">中優先</span>';
+        else if (d.total > 0) tags += '<span class="tag tag-low">一般</span>';
+        return tags || '<span class="tag" style="background:rgba(255,255,255,0.1);color:#666">無評分</span>';
+    }
+
+    // 高凝聚型表格
+    function renderCohesionTable() {
+        const tbody = document.querySelector('#cohesionTable tbody');
+        const items = allData.filter(d => d.isCohesion).sort((a,b) => b.total - a.total);
+
+        tbody.innerHTML = items.map(d => `
+            <tr>
+                <td>${d.id}</td>
+                <td>${d.cat}</td>
+                <td>${d.item}</td>
+                <td><strong>${d.total}</strong></td>
+                <td>${d.gap}</td>
+                <td>${d.std.toFixed(2)}</td>
+                <td>${renderRegionScores(d)}</td>
+                <td>${d.maxRegion}</td>
+                <td>${d.minRegion}</td>
+            </tr>
+        `).join('');
+
+        // 詳細回饋
+        const details = document.getElementById('cohesionDetails');
+        details.innerHTML = items.slice(0,10).map(d => `
+            <div class="cluster-card">
+                <div class="cluster-header">
+                    <span class="cluster-title">編號${d.id}: ${d.cat}/${d.item}</span>
+                    <span class="cluster-stats">總分 ${d.total} | 落差 ${d.gap}</span>
+                </div>
+                <p style="margin-bottom:10px;color:#b0b0b0;">${d.pain}</p>
+                ${d.northFb ? `<div class="feedback-box feedback-north"><strong>北區：</strong>${d.northFb.substring(0,100)}...</div>` : ''}
+                ${d.centralFb ? `<div class="feedback-box feedback-central"><strong>中區：</strong>${d.centralFb.substring(0,100)}...</div>` : ''}
+                ${d.southFb ? `<div class="feedback-box feedback-south"><strong>南區：</strong>${d.southFb.substring(0,100)}...</div>` : ''}
+                ${d.eastFb ? `<div class="feedback-box feedback-east"><strong>東區：</strong>${d.eastFb.substring(0,100)}...</div>` : ''}
+            </div>
+        `).join('');
+    }
+
+    // 高分散型表格
+    function renderDispersionTable() {
+        const tbody = document.querySelector('#dispersionTable tbody');
+        const items = allData.filter(d => d.isDispersion).sort((a,b) => b.gap - a.gap);
+
+        tbody.innerHTML = items.map(d => `
+            <tr>
+                <td>${d.id}</td>
+                <td>${d.cat}</td>
+                <td>${d.item}</td>
+                <td><strong>${d.total}</strong></td>
+                <td style="color:#ff9800;font-weight:bold;">${d.gap}</td>
+                <td>${d.std.toFixed(2)}</td>
+                <td>${renderRegionScores(d)}</td>
+                <td>${d.maxRegion}</td>
+                <td>${d.minRegion}</td>
+            </tr>
+        `).join('');
+
+        // 詳細回饋
+        const details = document.getElementById('dispersionDetails');
+        details.innerHTML = items.slice(0,10).map(d => `
+            <div class="cluster-card">
+                <div class="cluster-header">
+                    <span class="cluster-title">編號${d.id}: ${d.cat}/${d.item}</span>
+                    <span class="cluster-stats">落差 ${d.gap} | 高分區:${d.maxRegion} vs 低分區:${d.minRegion}</span>
+                </div>
+                <p style="margin-bottom:10px;color:#b0b0b0;">${d.pain}</p>
+                ${d.northFb ? `<div class="feedback-box feedback-north"><strong>北區(${d.north}分)：</strong>${d.northFb.substring(0,100)}...</div>` : ''}
+                ${d.centralFb ? `<div class="feedback-box feedback-central"><strong>中區(${d.central}分)：</strong>${d.centralFb.substring(0,100)}...</div>` : ''}
+                ${d.southFb ? `<div class="feedback-box feedback-south"><strong>南區(${d.south}分)：</strong>${d.southFb.substring(0,100)}...</div>` : ''}
+                ${d.eastFb ? `<div class="feedback-box feedback-east"><strong>東區(${d.east}分)：</strong>${d.eastFb.substring(0,100)}...</div>` : ''}
+            </div>
+        `).join('');
+    }
+
+    // 政策面表格
+    function renderPolicyTable() {
+        const tbody = document.querySelector('#policyTable tbody');
+        const items = allData.filter(d => d.isPolicy).sort((a,b) => b.total - a.total);
+
+        tbody.innerHTML = items.map(d => {
+            const allFb = [d.northFb, d.centralFb, d.southFb, d.eastFb].filter(f => f && d.matchedKeywords.some(kw => f.includes(kw)));
+            return `
+            <tr>
+                <td>${d.id}</td>
+                <td>${d.cat}</td>
+                <td>${d.item}</td>
+                <td><strong>${d.total}</strong></td>
+                <td>${d.matchedKeywords.map(k => `<span class="tag tag-policy">${k}</span>`).join('')}</td>
+                <td style="font-size:0.85em;color:#b0b0b0;">${allFb[0]?.substring(0,80) || d.pain.substring(0,80)}...</td>
+            </tr>
+        `}).join('');
+    }
+
+    // 整併建議
+    function renderClusterCards() {
+        const container = document.getElementById('clusterCards');
+        container.innerHTML = clusterData.map(c => `
+            <div class="cluster-card">
+                <div class="cluster-header">
+                    <span class="cluster-title" style="color:${c.color}">${c.name}</span>
+                    <span class="cluster-stats">${c.count}項 | 總分${c.totalScore}</span>
+                </div>
+                <div class="progress-indicator">
+                    <span style="min-width:80px;">項目數</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:${c.count/48*100}%;background:${c.color}"></div>
+                    </div>
+                    <span>${c.count}</span>
+                </div>
+            </div>
+        `).join('');
+
+        const recommendations = document.getElementById('mergeRecommendations');
+        recommendations.innerHTML = clusterData.slice(0,8).map(c => `
+            <div class="summary-item" style="border-color:${c.color}">
+                <h4 style="color:${c.color}">${c.name}</h4>
+                <p>共 ${c.count} 項可整併，總分 ${c.totalScore}。建議整併為統一的優化專案，可提升開發效率並避免重複工作。</p>
+            </div>
+        `).join('');
+    }
+
+    // 完整清單
+    function renderAllItemsTable() {
+        const tbody = document.querySelector('#allItemsTable tbody');
+        const categoryFilter = document.getElementById('categoryFilter');
+
+        // 填充分類選項
+        const cats = [...new Set(allData.map(d => d.cat))];
+        categoryFilter.innerHTML = '<option value="">全部分類</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+
+        tbody.innerHTML = allData.map(d => `
+            <tr data-cat="${d.cat}" data-total="${d.total}" data-cohesion="${d.isCohesion}" data-dispersion="${d.isDispersion}" data-policy="${d.isPolicy}">
+                <td>${d.id}</td>
+                <td>${d.cat}</td>
+                <td>${d.item}</td>
+                <td style="font-size:0.85em;color:#b0b0b0;">${d.pain.substring(0,50)}...</td>
+                <td><strong>${d.total}</strong></td>
+                <td>${renderRegionScores(d)}</td>
+                <td>${renderTags(d)}</td>
+            </tr>
+        `).join('');
+    }
+
+    // 篩選完整清單
+    function filterAllItems() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const cat = document.getElementById('categoryFilter').value;
+        const type = document.getElementById('typeFilter').value;
+        const score = document.getElementById('scoreFilter').value;
+
+        document.querySelectorAll('#allItemsTable tbody tr').forEach(row => {
+            let show = true;
+            if (search && !row.textContent.toLowerCase().includes(search)) show = false;
+            if (cat && row.dataset.cat !== cat) show = false;
+            if (type === 'cohesion' && row.dataset.cohesion !== 'true') show = false;
+            if (type === 'dispersion' && row.dataset.dispersion !== 'true') show = false;
+            if (type === 'policy' && row.dataset.policy !== 'true') show = false;
+            if (score === 'high' && parseInt(row.dataset.total) < 15) show = false;
+            if (score === 'medium' && (parseInt(row.dataset.total) < 10 || parseInt(row.dataset.total) >= 15)) show = false;
+            if (score === 'low' && parseInt(row.dataset.total) >= 10) show = false;
+            row.style.display = show ? '' : 'none';
+        });
+    }
+
+    // 圖表初始化
+    function initCharts() {
+        // 大分類分布
+        const catStats = {};
+        allData.forEach(d => {
+            if (!catStats[d.cat]) catStats[d.cat] = {count:0, total:0};
+            catStats[d.cat].count++;
+            catStats[d.cat].total += d.total;
+        });
+        const catLabels = Object.keys(catStats).sort((a,b) => catStats[b].count - catStats[a].count).slice(0,10);
+
+        new Chart(document.getElementById('categoryChart'), {
+            type: 'bar',
+            data: {
+                labels: catLabels.map(l => l.length > 10 ? l.substring(0,10)+'...' : l),
+                datasets: [{
+                    label: '項目數',
+                    data: catLabels.map(l => catStats[l].count),
+                    backgroundColor: 'rgba(0,212,255,0.7)',
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { title: { display: true, text: '大分類項目數分布 (TOP 10)', color: '#e8e8e8', font: { size: 16 } }, legend: { display: false } },
+                scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } }
+            }
+        });
+
+        // 四區評分對比
+        new Chart(document.getElementById('regionChart'), {
+            type: 'radar',
+            data: {
+                labels: ['北區', '中區', '南區', '東區'],
+                datasets: [{
+                    label: '總評分',
+                    data: [166, 202, 287, 158],
+                    backgroundColor: 'rgba(0,212,255,0.2)',
+                    borderColor: '#00d4ff',
+                    pointBackgroundColor: '#00d4ff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { title: { display: true, text: '四區評分分布', color: '#e8e8e8', font: { size: 16 } } },
+                scales: { r: { angleLines: { color: 'rgba(255,255,255,0.1)' }, grid: { color: 'rgba(255,255,255,0.1)' }, ticks: { color: '#94a3b8' }, pointLabels: { color: '#e8e8e8' } } }
+            }
+        });
+
+        // 凝聚/分散分布
+        const cohesionCount = allData.filter(d => d.isCohesion).length;
+        const dispersionCount = allData.filter(d => d.isDispersion).length;
+        const otherCount = 112 - cohesionCount - dispersionCount + allData.filter(d => d.isCohesion && d.isDispersion).length;
+
+        new Chart(document.getElementById('cohesionDistChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['高凝聚型', '高分散型', '一般'],
+                datasets: [{
+                    data: [cohesionCount, dispersionCount, otherCount],
+                    backgroundColor: ['#00d4ff', '#ff9800', '#4caf50'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { title: { display: true, text: '凝聚度分布', color: '#e8e8e8', font: { size: 16 } }, legend: { labels: { color: '#e8e8e8' } } }
+            }
+        });
+
+        // 分數分布
+        const highScore = allData.filter(d => d.total >= 15).length;
+        const mediumScore = allData.filter(d => d.total >= 10 && d.total < 15).length;
+        const lowScore = allData.filter(d => d.total > 0 && d.total < 10).length;
+        const noScore = allData.filter(d => d.total === 0).length;
+
+        new Chart(document.getElementById('scoreDistChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['高分(≥15)', '中分(10-14)', '低分(1-9)', '無評分(0)'],
+                datasets: [{
+                    data: [highScore, mediumScore, lowScore, noScore],
+                    backgroundColor: ['#ff5252', '#ffc107', '#4caf50', '#607d8b'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { title: { display: true, text: '評分分布', color: '#e8e8e8', font: { size: 16 } }, legend: { labels: { color: '#e8e8e8' } } }
+            }
+        });
+
+        // 四區對比柱狀圖
+        new Chart(document.getElementById('regionCompareChart'), {
+            type: 'bar',
+            data: {
+                labels: ['北區', '中區', '南區', '東區'],
+                datasets: [{
+                    label: '總評分',
+                    data: [166, 202, 287, 158],
+                    backgroundColor: ['#2196f3', '#4caf50', '#ff9800', '#9c27b0']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { x: { ticks: { color: '#e8e8e8' } }, y: { ticks: { color: '#94a3b8' } } }
+            }
+        });
+
+        // 政策關鍵詞分布
+        const policyKeywordCounts = {};
+        allData.forEach(d => d.matchedKeywords.forEach(k => policyKeywordCounts[k] = (policyKeywordCounts[k] || 0) + 1));
+        const policyLabels = Object.keys(policyKeywordCounts).sort((a,b) => policyKeywordCounts[b] - policyKeywordCounts[a]);
+
+        new Chart(document.getElementById('policyChart'), {
+            type: 'bar',
+            data: {
+                labels: policyLabels,
+                datasets: [{
+                    label: '出現次數',
+                    data: policyLabels.map(l => policyKeywordCounts[l]),
+                    backgroundColor: 'rgba(156,39,176,0.7)',
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: { title: { display: true, text: '政策面關鍵詞出現頻率', color: '#e8e8e8', font: { size: 16 } }, legend: { display: false } },
+                scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#e8e8e8' } } }
+            }
+        });
+
+        // 核心痛點群組
+        new Chart(document.getElementById('clusterChart'), {
+            type: 'bar',
+            data: {
+                labels: clusterData.map(c => c.name.length > 12 ? c.name.substring(0,12)+'...' : c.name),
+                datasets: [
+                    { label: '項目數', data: clusterData.map(c => c.count), backgroundColor: clusterData.map(c => c.color), borderRadius: 5 }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: { title: { display: true, text: '核心痛點群組 - 項目數', color: '#e8e8e8', font: { size: 16 } }, legend: { display: false } },
+                scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#e8e8e8' } } }
+            }
+        });
+    }
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+        initCharts();
+        renderCohesionTable();
+        renderDispersionTable();
+        renderPolicyTable();
+        renderClusterCards();
+        renderAllItemsTable();
+    });
+    </script>
+</body>
+</html>
